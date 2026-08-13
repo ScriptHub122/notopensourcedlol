@@ -1,13 +1,15 @@
 --!strict
--- 4 Games 1 Script | physco.cc | Converted to Luau + Fully Syntax-Checked
+-- 4 Games 1 Script | physco.cc | Converted to Luau
 repeat task.wait(0.1) until game:IsLoaded()
+
+
+---https://raw.githubusercontent.com/ScriptHub122/notopensourcedlol/refs/heads/main/notopensrclol
+
 
 getgenv().beeconloaded = true
 
 -- Load external libraries
-pcall(function()
-    loadstring(game:HttpGet("https://pastefy.app/1lve7ZVH/raw", true))()
-end)
+
 
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
@@ -26,13 +28,13 @@ local Window = Fluent:CreateWindow({
 
 -- Add tabs
 local Tabs = {
-    Info        = Window:AddTab({ Title = "Script Info",          Icon = "book-open" }),
-    Settings    = Window:AddTab({ Title = "Settings",             Icon = "file-cog" }),
-    Main        = Window:AddTab({ Title = "Main",                 Icon = "home" }),
-    Target      = Window:AddTab({ Title = "Players",             Icon = "person-standing" }),
-    Misc        = Window:AddTab({ Title = "Misc",                 Icon = "file-text" }),
-    Credit      = Window:AddTab({ Title = "Credit",                Icon = "scroll" }),
-    GuiSettings = Window:AddTab({ Title = "Gui Settings",         Icon = "settings" }),
+    Info       = Window:AddTab({ Title = "Script Info",        Icon = "book-open" }),
+    Settings   = Window:AddTab({ Title = "Settings",           Icon = "file-cog" }),
+    Main       = Window:AddTab({ Title = "Main",               Icon = "home" }),
+    Target     = Window:AddTab({ Title = "Players",            Icon = "person-standing" }),
+    Misc       = Window:AddTab({ Title = "Misc",               Icon = "file-text" }),
+    Credit     = Window:AddTab({ Title = "Credit",             Icon = "scroll" }),
+    GuiSettings= Window:AddTab({ Title = "Gui Settings",       Icon = "settings" }),
 }
 
 Fluent:Notify({
@@ -47,9 +49,9 @@ local TweenSpeed        = 100
 local TpWalkSpeed       = 5
 local BehindDistance    = 5
 local HeightOffset      = 0
-local SelectedTarget: Player? = nil
+local SelectedTarget    = nil
 local TargetMode        = "Closest Player"
-local BodyVelocity: Instance? = nil
+local BodyVelocity      = nil
 
 -- Services
 local VirtualInput      = game:GetService("VirtualInputManager")
@@ -57,15 +59,9 @@ local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local TweenService      = game:GetService("TweenService")
 local LocalPlayer       = Players.LocalPlayer
-local Character: Model? = LocalPlayer.Character or nil
+local Character         = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Heartbeat         = RunService.Heartbeat
 local WalkLoopRunning   = false
-
--- Update character reference reliably
-local function UpdateCharacter()
-    Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-end
-UpdateCharacter()
 
 -- Get all players excluding local
 local function GetPlayerList(): {string}
@@ -76,6 +72,22 @@ local function GetPlayerList(): {string}
         end
     end
     return list
+end
+
+-- Teleport walk logic
+local function TpWalk()
+    WalkLoopRunning = true
+    local char = Character
+    if not char then return end
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    if not hum then return end
+
+    while WalkLoopRunning and char and hum and hum.Parent do
+        local dt = Heartbeat:Wait()
+        if hum.MoveDirection.Magnitude > 0 then
+            char:TranslateBy(hum.MoveDirection * dt * 10 * TpWalkSpeed)
+        end
+    end
 end
 
 -- Distance helper
@@ -89,8 +101,7 @@ local function GetLowestHealthPlayer(): Player?
     local minHealth = math.huge
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
-            local char = p.Character
-            local hum = char and char:FindFirstChild("Humanoid") :: Humanoid?
+            local hum = p.Character and p.Character:FindFirstChild("Humanoid")
             if hum and hum.Health > 0 and hum.Health < minHealth then
                 minHealth = hum.Health
                 target = p
@@ -102,18 +113,17 @@ end
 
 -- Find closest player
 local function GetClosestPlayer(): Player?
-    if not Character then return nil end
-    local root = Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-    if not root then return nil end
-    local pos = root.Position
+    local charRoot = Character and Character:FindFirstChild("HumanoidRootPart")
+    if not charRoot then return nil end
+    local pos = charRoot.Position
     local target: Player? = nil
     local minDist = math.huge
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
-            local pRoot = p.Character and p.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-            local pHum = p.Character and p.Character:FindFirstChild("Humanoid") :: Humanoid?
-            if pRoot and pHum and pHum.Health > 0 then
-                local dist = GetDistance(pos, pRoot.Position)
+            local root = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+            local hum = p.Character and p.Character:FindFirstChild("Humanoid")
+            if root and hum and hum.Health > 0 then
+                local dist = GetDistance(pos, root.Position)
                 if dist < minDist then
                     minDist = dist
                     target = p
@@ -127,8 +137,7 @@ end
 -- Smooth move to position
 local function MoveTo(cf: CFrame)
     pcall(function()
-        if not Character then return end
-        local root = Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+        local root = Character and Character:FindFirstChild("HumanoidRootPart")
         if not root then return end
         local targetPos = cf.Position - cf.LookVector * BehindDistance
         targetPos += Vector3.new(0, HeightOffset, 0)
@@ -137,29 +146,8 @@ local function MoveTo(cf: CFrame)
         local tween = TweenService:Create(root, TweenInfo.new(dist / TweenSpeed, Enum.EasingStyle.Linear), {CFrame = goalCF})
         tween:Play()
         tween.Completed:Connect(function()
-            if not root.Parent then
-                tween:Cancel()
-            end
+            if not root.Parent then tween:Cancel() end
         end)
-    end)
-end
-
--- Teleport walk logic
-local function TpWalk()
-    WalkLoopRunning = true
-    UpdateCharacter()
-    if not Character then return end
-    local hum = Character:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
-    if not hum then return end
-
-    task.spawn(function()
-        while WalkLoopRunning and Character and hum and hum.Parent do
-            local dt = Heartbeat:Wait()
-            if hum.MoveDirection.Magnitude > 0 then
-                Character:TranslateBy(hum.MoveDirection * dt * 10 * TpWalkSpeed)
-            end
-            task.wait()
-        end
     end)
 end
 
@@ -170,23 +158,23 @@ task.spawn(function()
         if not _G.OBBY then continue end
 
         -- Ensure character exists
-        if not Character or not (Character :: Model):FindFirstChild("HumanoidRootPart") then
+        if not Character or not Character:FindFirstChild("HumanoidRootPart") then
             repeat
                 task.wait(0.1)
-                UpdateCharacter()
-            until Character and (Character :: Model):FindFirstChild("HumanoidRootPart")
+                Character = LocalPlayer.Character
+            until Character and Character:FindFirstChild("HumanoidRootPart")
         end
 
         -- Select target
         local target = TargetMode == "Lowest Health Player" and GetLowestHealthPlayer() or GetClosestPlayer()
         if not target or not target.Character then continue end
-        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
         if not targetRoot then continue end
 
         -- Maintain position
-        local root = (Character :: Model):FindFirstChild("HumanoidRootPart") :: BasePart?
+        local root = Character:FindFirstChild("HumanoidRootPart")
         if not root then continue end
-        BodyVelocity = root:FindFirstChild("Main") :: Instance? or Instance.new("BodyVelocity", root)
+        BodyVelocity = root:FindFirstChild("Main") or Instance.new("BodyVelocity", root)
         BodyVelocity.Name = "Main"
         BodyVelocity.Velocity = Vector3.zero
         BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
@@ -203,7 +191,7 @@ Tabs.Info:AddParagraph({ Title = "Heroes Battlegrounds",    Content = "" })
 Tabs.Info:AddParagraph({ Title = "Legends Battlegrounds",   Content = "" })
 
 -- Target Selection
-local PlayerDropdown: any = nil
+local PlayerDropdown, SelectedPlayer = nil, nil
 
 local function RefreshPlayerDropdown()
     if PlayerDropdown then PlayerDropdown:Destroy() end
@@ -216,10 +204,7 @@ local function RefreshPlayerDropdown()
     })
     PlayerDropdown:OnChanged(function(name: string)
         for _, p in ipairs(Players:GetPlayers()) do
-            if p.Name == name then
-                SelectedTarget = p
-                break
-            end
+            if p.Name == name then SelectedPlayer = p; break end
         end
     end)
 end
@@ -236,14 +221,12 @@ Fluent.Options.OBBY2:OnChanged(function()
     _G.OBBY2 = Fluent.Options.OBBY2.Value
     task.spawn(function()
         while _G.OBBY2 do
-            if not Character or not (Character :: Model):FindFirstChild("HumanoidRootPart") then
-                repeat
-                    task.wait(0.1)
-                    UpdateCharacter()
-                until Character and (Character :: Model):FindFirstChild("HumanoidRootPart")
+            if not Character or not Character:FindFirstChild("HumanoidRootPart") then
+                repeat task.wait(0.1) Character = LocalPlayer.Character
+                until Character and Character:FindFirstChild("HumanoidRootPart")
             end
-            if SelectedTarget and SelectedTarget.Character then
-                local root = SelectedTarget.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+            if SelectedPlayer and SelectedPlayer.Character then
+                local root = SelectedPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if root then MoveTo(root.CFrame) end
             end
             task.wait(1e-5)
@@ -283,36 +266,26 @@ local function AutoPunch()
     if PlaceId == 9391468976 then -- Jujutsu Shenanigans
         for _, name in ipairs(Characters) do
             pcall(function()
-                local service = game:GetService("ReplicatedStorage"):WaitForChild("Knit")
-                    :WaitForChild("Knit"):WaitForChild("Services"):WaitForChild(name .. "Service"):WaitForChild("RE")
-                service:WaitForChild("Activated"):FireServer(false)
+                game.ReplicatedStorage.Knit.Knit.Services[name.."Service"].RE.Activated:FireServer(false)
             end)
         end
     elseif PlaceId == 15269951959 then -- Legends Battlegrounds
         pcall(function()
-            if not Character then return end
-            Character:FindFirstChild("Network"):FireServer({ Request = "M1Down" })
+            LocalPlayer.Character.Network:FireServer({ Request = "M1Down" })
         end)
     elseif PlaceId == 13076380114 then -- Realm Rampage
-        VirtualInput:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        VirtualInput:SendMouseButtonEvent(0,0,0,true,game,0)
         task.wait(1)
-        VirtualInput:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        VirtualInput:SendMouseButtonEvent(0,0,0,false,game,0)
     elseif PlaceId == 17129858194 then -- Heroes Battlegrounds
         task.spawn(function()
-            if not Character then return end
-            local main = Character:FindFirstChild("Main")
-            if not main then return end
-            local re = main:FindFirstChild("RemoteEvent")
-            if not re then return end
-            re:FireServer(
-                "animval", "rbxassetid://15350829298", 0.16200000047683716, 2433.3153373972746,
-                nil,
-                CFrame.new(274.2107849121094, 2.9999804496765137, 328.0010681152344,
-                    0.9688709378242493, -4.328358560456991e-9, 0.24756647646427155,
-                    -1.2491100598310823e-8, 1, 6.636852845076646e-8,
-                    -0.24756647646427155, -6.739491453799928e-8, 0.9688709378242493),
-                nil, 0
-            )
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("Main") and char.Main:FindFirstChild("RemoteEvent") then
+                char.Main.RemoteEvent:FireServer(
+                    "animval", "rbxassetid://15350829298", 0.162, 2433.315,
+                    CFrame.new(274.21, 3, 328, 0.9689, 0, 0.2476, 0, 1, 0, -0.2476, 0, 0.9689), 0
+                )
+            end
         end)
     end
 end
@@ -321,21 +294,16 @@ end
 Tabs.Main:AddToggle("CCCC", { Title = "Auto Punch", Default = false })
 Fluent.Options.CCCC:OnChanged(function()
     _G.CCCC = Fluent.Options.CCCC.Value
-    task.spawn(function()
-        while _G.CCCC do
-            AutoPunch()
-            task.wait(0.1)
-        end
-    end)
+    task.spawn(function() while _G.CCCC do AutoPunch() task.wait(0.1) end end)
 end)
 
--- Skill Keys Helper
-local function SkillToggle(optionName: string, displayName: string, key: Enum.KeyCode)
-    Tabs.Main:AddToggle(optionName, { Title = displayName, Default = false })
-    Fluent.Options[optionName]:OnChanged(function()
-        _G[optionName] = Fluent.Options[optionName].Value
+-- Skill Keys
+local function SkillToggle(name: string, title: string, key: Enum.KeyCode)
+    Tabs.Main:AddToggle(name, { Title = title, Default = false })
+    Fluent.Options[name]:OnChanged(function()
+        _G[name] = Fluent.Options[name].Value
         task.spawn(function()
-            while _G[optionName] do
+            while _G[name] do
                 VirtualInput:SendKeyEvent(true, key, false, game)
                 VirtualInput:SendKeyEvent(false, key, false, game)
                 task.wait(0.1)
@@ -343,35 +311,28 @@ local function SkillToggle(optionName: string, displayName: string, key: Enum.Ke
         end)
     end)
 end
-
--- Register skill toggles
-SkillToggle("SKILL1", "Auto Use Skill 1", Enum.KeyCode.One)
-SkillToggle("SKILL2", "Auto Use Skill 2", Enum.KeyCode.Two)
-SkillToggle("SKILL3", "Auto Use Skill 3", Enum.KeyCode.Three)
-SkillToggle("SKILL4", "Auto Use Skill 4", Enum.KeyCode.Four)
-SkillToggle("SKILL5", "Auto Ultimate Mode (G)", Enum.KeyCode.G)
+SkillToggle("SKILL1", "Auto Skill 1", Enum.KeyCode.One)
+SkillToggle("SKILL2", "Auto Skill 2", Enum.KeyCode.Two)
+SkillToggle("SKILL3", "Auto Skill 3", Enum.KeyCode.Three)
+SkillToggle("SKILL4", "Auto Skill 4", Enum.KeyCode.Four)
+SkillToggle("SKILL5", "Auto Ultimate (G)", Enum.KeyCode.G)
 
 -- Misc Tab
-Tabs.Misc:AddInput("TpWalkSpeedOpt", { Title = "Tp Walk Speed", Default = "5", Numeric = true, Finished = false,
+Tabs.Misc:AddInput("TpWalkSpeed", { Title = "Tp Walk Speed", Default = "5", Numeric = true, Finished = false,
     Callback = function(v) TpWalkSpeed = tonumber(v) or 5 end })
 Tabs.Misc:AddButton({ Title = "Enable Tp Walk", Callback = TpWalk })
 
 -- Infinite Jump
-Tabs.Misc:AddButton({ Title = "Inf Jump", Callback = function()
-    local conn: RBXScriptConnection? = nil
+Tabs.Misc:AddButton({ Title = "Infinite Jump", Callback = function()
+    local conn: RBXScriptConnection?
     local active = false
+    conn = LocalPlayer.PlayerGui.ScreenGui.Frame.JumpButton.InputBegan:Connect(function() end) -- placeholder
     pcall(function()
-        local UIS = game:GetService("UserInputService")
-        if conn then conn:Disconnect() end
-        conn = UIS.JumpRequest:Connect(function()
+        conn = game:GetService("UserInputService").JumpRequest:Connect(function()
             if active then return end
             active = true
-            UpdateCharacter()
-            if not Character then return end
-            local hum = Character:FindFirstChildOfClass("Humanoid") :: Humanoid?
-            if hum then
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
+            local hum = Character and Character:FindFirstChild("Humanoid")
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
             task.wait()
             active = false
         end)
@@ -379,23 +340,16 @@ Tabs.Misc:AddButton({ Title = "Inf Jump", Callback = function()
 end})
 
 -- Auto Rejoin on kick
-Tabs.Misc:AddToggle("RJ", { Title = "Auto Rejoin When Kicked", Default = false })
+Tabs.Misc:AddToggle("RJ", { Title = "Auto Rejoin on Kick", Default = false })
 Fluent.Options.RJ:OnChanged(function()
     _G.RJ = Fluent.Options.RJ.Value
     if not _G.RJ then return end
     local TeleportService = game:GetService("TeleportService")
-    local overlay = game:GetService("CoreGui"):FindFirstChild("RobloxPromptGui")
-    if overlay then
-        overlay:FindFirstChild("promptOverlay").ChildAdded:Connect(function(child: Instance)
-            if child.Name == "ErrorPrompt" and child:FindFirstChild("MessageArea") then
-                task.spawn(function()
-                    pcall(function()
-                        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-                    end)
-                end)
-            end
-        end)
-    end
+    game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
+        if child.Name == "ErrorPrompt" and child:FindFirstChild("MessageArea") then
+            task.spawn(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
+        end
+    end)
 end)
 
 -- Anti-AFK
@@ -405,23 +359,17 @@ Fluent.Options.afkk:OnChanged(function()
     if not _G.afkk then return end
     task.spawn(function()
         LocalPlayer.Idled:Connect(function()
-            local VirtualUser = game:GetService("VirtualUser")
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
+            local vUser = game:GetService("VirtualUser")
+            vUser:CaptureController()
+            vUser:ClickButton2(Vector2.new())
         end)
     end)
 end)
 
 -- Credit Tab
 Tabs.Credit:AddParagraph({ Title = "Click Button To Copy Link", Content = "" })
-Tabs.Credit:AddButton({
-    Title = "Discord",
-    Description = "Stay tuned for updates and report bugs",
-    Callback = function()
-        pcall(function()
-            setclipboard("https://discord.gg/dB5jEFWZ83")
-        end)
-    end,
+Tabs.Credit:AddButton({ Title = "Discord", Description = "Updates & bug reports",
+    Callback = function() pcall(function() setclipboard("https://discord.gg/dB5jEFWZ83") end) end
 })
 
 -- Setup Fluent addons
