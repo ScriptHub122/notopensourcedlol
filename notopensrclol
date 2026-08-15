@@ -1,69 +1,45 @@
 --!strict
--- 4 Games 1 Script | physco.cc | Converted to Luau
 repeat task.wait(0.1) until game:IsLoaded()
-
-
----https://raw.githubusercontent.com/ScriptHub122/notopensourcedlol/refs/heads/main/notopensrclol
-
-
 getgenv().beeconloaded = true
 
--- Load external libraries
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
-
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-
--- Create main window
-local Window = Fluent:CreateWindow({
-    Title = "4 Games 1 Script | physco.cc",
-    SubTitle = "by physco.cc",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(520, 320),
-    Acrylic = false,
+local Window = WindUI:CreateWindow({
+    Title = "4 Battlegrounds 1 Script | physco.cc",
+    Icon = "gamepad-2",
+    Author = "by physco.cc",
+    Folder = "physcoHub",
+    Size = UDim2.fromOffset(520, 380),
+    Transparent = true,
     Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl,
+    Resizable = true,
+    SideBarWidth = 160,
+    KeySystem = {
+        Key = {"physco.cc3"},
+        SaveKey = false,
+        URL = "https://discord.gg/physco",
+    },
 })
 
--- Add tabs
-local Tabs = {
-    Info       = Window:AddTab({ Title = "Script Info",        Icon = "book-open" }),
-    Settings   = Window:AddTab({ Title = "Settings",           Icon = "file-cog" }),
-    Main       = Window:AddTab({ Title = "Main",               Icon = "home" }),
-    Target     = Window:AddTab({ Title = "Players",            Icon = "person-standing" }),
-    Misc       = Window:AddTab({ Title = "Misc",               Icon = "file-text" }),
-    Credit     = Window:AddTab({ Title = "Credit",             Icon = "scroll" }),
-    GuiSettings= Window:AddTab({ Title = "Gui Settings",       Icon = "settings" }),
-}
+Window:SetToggleKey(Enum.KeyCode.LeftControl)
 
-Fluent:Notify({
-    Title = "Hello",
-    Content = "Enjoy The Script",
-    SubContent = "",
-    Duration = 10,
-})
+local TweenSpeed = 100
+local TpWalkSpeed = 5
+local BehindDistance = 5
+local HeightOffset = 0
+local SelectedTarget: Player? = nil
+local TargetMode = "Closest Player"
+local BodyVelocity: Instance? = nil
 
--- Configurable variables
-local TweenSpeed        = 100
-local TpWalkSpeed       = 5
-local BehindDistance    = 5
-local HeightOffset      = 0
-local SelectedTarget    = nil
-local TargetMode        = "Closest Player"
-local BodyVelocity      = nil
+local VirtualInput = game:GetService("VirtualInputManager")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Heartbeat = RunService.Heartbeat
+local WalkLoopRunning = false
 
--- Services
-local VirtualInput      = game:GetService("VirtualInputManager")
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local TweenService      = game:GetService("TweenService")
-local LocalPlayer       = Players.LocalPlayer
-local Character         = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Heartbeat         = RunService.Heartbeat
-local WalkLoopRunning   = false
-
--- Get all players excluding local
 local function GetPlayerList(): {string}
     local list: {string} = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -74,28 +50,10 @@ local function GetPlayerList(): {string}
     return list
 end
 
--- Teleport walk logic
-local function TpWalk()
-    WalkLoopRunning = true
-    local char = Character
-    if not char then return end
-    local hum = char:FindFirstChildWhichIsA("Humanoid")
-    if not hum then return end
-
-    while WalkLoopRunning and char and hum and hum.Parent do
-        local dt = Heartbeat:Wait()
-        if hum.MoveDirection.Magnitude > 0 then
-            char:TranslateBy(hum.MoveDirection * dt * 10 * TpWalkSpeed)
-        end
-    end
-end
-
--- Distance helper
 local function GetDistance(a: Vector3, b: Vector3): number
     return (a - b).Magnitude
 end
 
--- Find player with lowest health
 local function GetLowestHealthPlayer(): Player?
     local target: Player? = nil
     local minHealth = math.huge
@@ -111,7 +69,6 @@ local function GetLowestHealthPlayer(): Player?
     return target
 end
 
--- Find closest player
 local function GetClosestPlayer(): Player?
     local charRoot = Character and Character:FindFirstChild("HumanoidRootPart")
     if not charRoot then return nil end
@@ -134,7 +91,6 @@ local function GetClosestPlayer(): Player?
     return target
 end
 
--- Smooth move to position
 local function MoveTo(cf: CFrame)
     pcall(function()
         local root = Character and Character:FindFirstChild("HumanoidRootPart")
@@ -145,241 +101,266 @@ local function MoveTo(cf: CFrame)
         local dist = (goalCF.Position - root.Position).Magnitude
         local tween = TweenService:Create(root, TweenInfo.new(dist / TweenSpeed, Enum.EasingStyle.Linear), {CFrame = goalCF})
         tween:Play()
-        tween.Completed:Connect(function()
-            if not root.Parent then tween:Cancel() end
-        end)
     end)
 end
 
--- Main auto-farm loop
-task.spawn(function()
-    while true do
-        task.wait(1e-11)
-        if not _G.OBBY then continue end
-
-        -- Ensure character exists
-        if not Character or not Character:FindFirstChild("HumanoidRootPart") then
-            repeat
-                task.wait(0.1)
-                Character = LocalPlayer.Character
-            until Character and Character:FindFirstChild("HumanoidRootPart")
+local function TpWalk()
+    WalkLoopRunning = true
+    local char = Character
+    if not char then return end
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    if not hum then return end
+    while WalkLoopRunning and char and hum and hum.Parent do
+        local dt = Heartbeat:Wait()
+        if hum.MoveDirection.Magnitude > 0 then
+            char:TranslateBy(hum.MoveDirection * dt * 10 * TpWalkSpeed)
         end
-
-        -- Select target
-        local target = TargetMode == "Lowest Health Player" and GetLowestHealthPlayer() or GetClosestPlayer()
-        if not target or not target.Character then continue end
-        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
-        if not targetRoot then continue end
-
-        -- Maintain position
-        local root = Character:FindFirstChild("HumanoidRootPart")
-        if not root then continue end
-        BodyVelocity = root:FindFirstChild("Main") or Instance.new("BodyVelocity", root)
-        BodyVelocity.Name = "Main"
-        BodyVelocity.Velocity = Vector3.zero
-        BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-
-        MoveTo(targetRoot.CFrame)
     end
-end)
-
--- Info Tab Content
-Tabs.Info:AddParagraph({ Title = "This script supports 4 games:", Content = "" })
-Tabs.Info:AddParagraph({ Title = "Jujutsu Shenanigans",    Content = "" })
-Tabs.Info:AddParagraph({ Title = "Realm Rampage",          Content = "" })
-Tabs.Info:AddParagraph({ Title = "Heroes Battlegrounds",    Content = "" })
-Tabs.Info:AddParagraph({ Title = "Legends Battlegrounds",   Content = "" })
-
--- Target Selection
-local PlayerDropdown, SelectedPlayer = nil, nil
-
-local function RefreshPlayerDropdown()
-    if PlayerDropdown then PlayerDropdown:Destroy() end
-    task.wait(0.1)
-    PlayerDropdown = Tabs.Target:AddDropdown("SecPlayer", {
-        Title = "Select Player",
-        Values = GetPlayerList(),
-        Multi = false,
-        Default = 1,
-    })
-    PlayerDropdown:OnChanged(function(name: string)
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p.Name == name then SelectedPlayer = p; break end
-        end
-    end)
 end
-RefreshPlayerDropdown()
-
-Tabs.Target:AddButton({
-    Title = "Refresh Player List",
-    Callback = RefreshPlayerDropdown,
-})
-
--- Auto-farm selected player
-Tabs.Target:AddToggle("OBBY2", { Title = "Auto Farm Selected Player", Default = false })
-Fluent.Options.OBBY2:OnChanged(function()
-    _G.OBBY2 = Fluent.Options.OBBY2.Value
-    task.spawn(function()
-        while _G.OBBY2 do
-            if not Character or not Character:FindFirstChild("HumanoidRootPart") then
-                repeat task.wait(0.1) Character = LocalPlayer.Character
-                until Character and Character:FindFirstChild("HumanoidRootPart")
-            end
-            if SelectedPlayer and SelectedPlayer.Character then
-                local root = SelectedPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if root then MoveTo(root.CFrame) end
-            end
-            task.wait(1e-5)
-        end
-    end)
-    if not _G.OBBY2 and BodyVelocity then
-        BodyVelocity:Destroy()
-        BodyVelocity = nil
-    end
-end)
-
--- Settings Tab Inputs
-Tabs.Settings:AddInput("InputTs", { Title = "Tween Speed", Default = "100", Numeric = true, Finished = true,
-    Callback = function(v) TweenSpeed = tonumber(v) or 100 end })
-Tabs.Settings:AddInput("InputYpos", { Title = "Player Behind Distance", Default = "5", Numeric = true, Finished = true,
-    Callback = function(v) BehindDistance = tonumber(v) or 5 end })
-Tabs.Settings:AddInput("InputZpos", { Title = "Height Offset", Default = "0", Numeric = true, Finished = true,
-    Callback = function(v) HeightOffset = tonumber(v) or 0 end })
-Tabs.Settings:AddDropdown("TargetMode", { Title = "Target Selection", Values = {"Closest Player","Lowest Health Player"}, Default = 1 })
-Fluent.Options.TargetMode:OnChanged(function(v) TargetMode = v end)
-
--- Main Auto-Farm Toggle
-Tabs.Main:AddToggle("OBBY", { Title = "Auto Farm Closest/Lowest", Default = false })
-Fluent.Options.OBBY:OnChanged(function()
-    _G.OBBY = Fluent.Options.OBBY.Value
-    if not _G.OBBY and BodyVelocity then
-        BodyVelocity:Destroy()
-        BodyVelocity = nil
-    end
-end)
-
--- Game-specific actions
-local PlaceId = game.PlaceId
-local Characters = { "Gojo", "Itadori", "Hakari", "Megumi", "Mahito" }
 
 local function AutoPunch()
-    if PlaceId == 9391468976 then -- Jujutsu Shenanigans
+    local PlaceId = game.PlaceId
+    local Characters = { "Gojo", "Itadori", "Hakari", "Megumi", "Mahito" }
+    if PlaceId == 9391468976 then
         for _, name in ipairs(Characters) do
             pcall(function()
                 game.ReplicatedStorage.Knit.Knit.Services[name.."Service"].RE.Activated:FireServer(false)
             end)
         end
-    elseif PlaceId == 15269951959 then -- Legends Battlegrounds
+    elseif PlaceId == 15269951959 then
         pcall(function()
             LocalPlayer.Character.Network:FireServer({ Request = "M1Down" })
         end)
-    elseif PlaceId == 13076380114 then -- Realm Rampage
+    elseif PlaceId == 13076380114 then
         VirtualInput:SendMouseButtonEvent(0,0,0,true,game,0)
         task.wait(1)
         VirtualInput:SendMouseButtonEvent(0,0,0,false,game,0)
-    elseif PlaceId == 17129858194 then -- Heroes Battlegrounds
+    elseif PlaceId == 17129858194 then
         task.spawn(function()
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("Main") and char.Main:FindFirstChild("RemoteEvent") then
-                char.Main.RemoteEvent:FireServer(
-                    "animval", "rbxassetid://15350829298", 0.162, 2433.315,
-                    CFrame.new(274.21, 3, 328, 0.9689, 0, 0.2476, 0, 1, 0, -0.2476, 0, 0.9689), 0
-                )
+                char.Main.RemoteEvent:FireServer("animval","rbxassetid://15350829298",0.162,2433.315,CFrame.new(274.21,3,328,0.9689,0,0.2476,0,1,0,-0.2476,0,0.9689),0)
             end
         end)
     end
 end
 
--- Main Tab Toggles
-Tabs.Main:AddToggle("CCCC", { Title = "Auto Punch", Default = false })
-Fluent.Options.CCCC:OnChanged(function()
-    _G.CCCC = Fluent.Options.CCCC.Value
-    task.spawn(function() while _G.CCCC do AutoPunch() task.wait(0.1) end end)
-end)
+local InfoTab = Window:Tab({ Title = "Script Info", Icon = "book-open" })
+InfoTab:Paragraph({
+    Title = "physco.cc",
+    Desc = "The Best Scripts Here",
+    Image = "https://cdn.discordapp.com/avatars/1460751009122095126/4419b5f248f4a8f09845668b2d069ec7.png",
+    ImageSize = 43,
+    Locked = false,
+    Buttons = {{Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/physco") end}}
+})
+InfoTab:Section({ Title = "Supported Games", TextXAlignment = "Left", TextSize = 16 })
+InfoTab:Paragraph({ Title = "✅ Jujutsu Shenanigans", Desc = "" })
+InfoTab:Paragraph({ Title = "✅ Realm Rampage", Desc = "" })
+InfoTab:Paragraph({ Title = "✅ Heroes Battlegrounds", Desc = "" })
+InfoTab:Paragraph({ Title = "✅ Legends Battlegrounds", Desc = "" })
 
--- Skill Keys
-local function SkillToggle(name: string, title: string, key: Enum.KeyCode)
-    Tabs.Main:AddToggle(name, { Title = title, Default = false })
-    Fluent.Options[name]:OnChanged(function()
-        _G[name] = Fluent.Options[name].Value
-        task.spawn(function()
-            while _G[name] do
-                VirtualInput:SendKeyEvent(true, key, false, game)
-                VirtualInput:SendKeyEvent(false, key, false, game)
-                task.wait(0.1)
-            end
-        end)
-    end)
-end
-SkillToggle("SKILL1", "Auto Skill 1", Enum.KeyCode.One)
-SkillToggle("SKILL2", "Auto Skill 2", Enum.KeyCode.Two)
-SkillToggle("SKILL3", "Auto Skill 3", Enum.KeyCode.Three)
-SkillToggle("SKILL4", "Auto Skill 4", Enum.KeyCode.Four)
-SkillToggle("SKILL5", "Auto Ultimate (G)", Enum.KeyCode.G)
+local SettingsTab = Window:Tab({ Title = "Settings", Icon = "settings" })
+SettingsTab:Section({ Title = "Configuration", TextXAlignment = "Left", TextSize = 16 })
 
--- Misc Tab
-Tabs.Misc:AddInput("TpWalkSpeed", { Title = "Tp Walk Speed", Default = "5", Numeric = true, Finished = false,
-    Callback = function(v) TpWalkSpeed = tonumber(v) or 5 end })
-Tabs.Misc:AddButton({ Title = "Enable Tp Walk", Callback = TpWalk })
-
--- Infinite Jump
-Tabs.Misc:AddButton({ Title = "Infinite Jump", Callback = function()
-    local conn: RBXScriptConnection?
-    local active = false
-    conn = LocalPlayer.PlayerGui.ScreenGui.Frame.JumpButton.InputBegan:Connect(function() end) -- placeholder
-    pcall(function()
-        conn = game:GetService("UserInputService").JumpRequest:Connect(function()
-            if active then return end
-            active = true
-            local hum = Character and Character:FindFirstChild("Humanoid")
-            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-            task.wait()
-            active = false
-        end)
-    end)
-end})
-
--- Auto Rejoin on kick
-Tabs.Misc:AddToggle("RJ", { Title = "Auto Rejoin on Kick", Default = false })
-Fluent.Options.RJ:OnChanged(function()
-    _G.RJ = Fluent.Options.RJ.Value
-    if not _G.RJ then return end
-    local TeleportService = game:GetService("TeleportService")
-    game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
-        if child.Name == "ErrorPrompt" and child:FindFirstChild("MessageArea") then
-            task.spawn(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
-        end
-    end)
-end)
-
--- Anti-AFK
-Tabs.Misc:AddToggle("afkk", { Title = "Anti AFK", Default = false })
-Fluent.Options.afkk:OnChanged(function()
-    _G.afkk = Fluent.Options.afkk.Value
-    if not _G.afkk then return end
-    task.spawn(function()
-        LocalPlayer.Idled:Connect(function()
-            local vUser = game:GetService("VirtualUser")
-            vUser:CaptureController()
-            vUser:ClickButton2(Vector2.new())
-        end)
-    end)
-end)
-
--- Credit Tab
-Tabs.Credit:AddParagraph({ Title = "Click Button To Copy Link", Content = "" })
-Tabs.Credit:AddButton({ Title = "Discord", Description = "Updates & bug reports",
-    Callback = function() pcall(function() setclipboard("https://discord.gg/dB5jEFWZ83") end) end
+SettingsTab:Input({
+    Title = "Tween Speed",
+    Default = "100",
+    Numeric = true,
+    Callback = function(v) TweenSpeed = tonumber(v) or 100 end,
 })
 
--- Setup Fluent addons
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("FluentScriptHub")
-SaveManager:SetFolder("FluentScriptHub/specific-game")
-InterfaceManager:BuildInterfaceSection(Tabs.GuiSettings)
-SaveManager:BuildConfigSection(Tabs.GuiSettings)
-Window:SelectTab(1)
-SaveManager:LoadAutoloadConfig()
+SettingsTab:Input({
+    Title = "Player Behind Distance",
+    Default = "5",
+    Numeric = true,
+    Callback = function(v) BehindDistance = tonumber(v) or 5 end,
+})
+
+SettingsTab:Input({
+    Title = "Height Offset",
+    Default = "0",
+    Numeric = true,
+    Callback = function(v) HeightOffset = tonumber(v) or 0 end,
+})
+
+SettingsTab:Dropdown({
+    Title = "Target Selection Mode",
+    Values = { "Closest Player", "Lowest Health Player" },
+    Value = "Closest Player",
+    Callback = function(v) TargetMode = v end,
+})
+
+local MainTab = Window:Tab({ Title = "Main", Icon = "home" })
+MainTab:Section({ Title = "Auto Farm", TextXAlignment = "Left", TextSize = 16 })
+
+MainTab:Toggle({
+    Title = "Auto Farm Closest/Lowest",
+    Value = false,
+    Callback = function(v)
+        _G.OBBY = v
+        if not v and BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
+    end,
+})
+
+MainTab:Toggle({
+    Title = "Auto Punch",
+    Value = false,
+    Callback = function(v)
+        _G.CCCC = v
+        task.spawn(function() while _G.CCCC do AutoPunch() task.wait(0.1) end end)
+    end,
+})
+
+MainTab:Section({ Title = "Auto Skills", TextXAlignment = "Left", TextSize = 16 })
+
+local function SkillToggle(name: string, title: string, key: Enum.KeyCode)
+    MainTab:Toggle({
+        Title = title,
+        Value = false,
+        Callback = function(v)
+            _G[name] = v
+            task.spawn(function()
+                while _G[name] do
+                    VirtualInput:SendKeyEvent(true,key,false,game)
+                    VirtualInput:SendKeyEvent(false,key,false,game)
+                    task.wait(0.1)
+                end
+            end)
+        end,
+    })
+end
+
+SkillToggle("SKILL1","Auto Skill 1 (1)",Enum.KeyCode.One)
+SkillToggle("SKILL2","Auto Skill 2 (2)",Enum.KeyCode.Two)
+SkillToggle("SKILL3","Auto Skill 3 (3)",Enum.KeyCode.Three)
+SkillToggle("SKILL4","Auto Skill 4 (4)",Enum.KeyCode.Four)
+SkillToggle("SKILL5","Auto Ultimate (G)",Enum.KeyCode.G)
+
+local TargetTab = Window:Tab({ Title = "Players", Icon = "users" })
+TargetTab:Section({ Title = "Target Selection", TextXAlignment = "Left", TextSize = 16 })
+
+local PlayerDropdown = nil
+
+local function RefreshPlayerDropdown()
+    if PlayerDropdown then PlayerDropdown:Destroy() end
+    task.wait(0.1)
+    PlayerDropdown = TargetTab:Dropdown({
+        Title = "Select Player",
+        Values = GetPlayerList(),
+        Value = "None",
+        Callback = function(n)
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Name == n then SelectedTarget = p break end
+            end
+        end,
+    })
+end
+
+TargetTab:Button({ Title = "Refresh Player List", Callback = RefreshPlayerDropdown })
+
+TargetTab:Toggle({
+    Title = "Auto Farm Selected Player",
+    Value = false,
+    Callback = function(v)
+        _G.OBBY2 = v
+        task.spawn(function()
+            while _G.OBBY2 do
+                if not Character or not Character:FindFirstChild("HumanoidRootPart") then
+                    repeat task.wait(0.1) Character = LocalPlayer.Character
+                    until Character and Character:FindFirstChild("HumanoidRootPart")
+                end
+                if SelectedTarget and SelectedTarget.Character then
+                    local root = SelectedTarget.Character:FindFirstChild("HumanoidRootPart")
+                    if root then MoveTo(root.CFrame) end
+                end
+                task.wait(1e-5)
+            end
+        end)
+        if not v and BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
+    end,
+})
+
+local MiscTab = Window:Tab({ Title = "Misc", Icon = "settings" })
+MiscTab:Section({ Title = "Utilities", TextXAlignment = "Left", TextSize = 16 })
+
+MiscTab:Input({
+    Title = "Tp Walk Speed",
+    Default = "5",
+    Numeric = true,
+    Callback = function(v) TpWalkSpeed = tonumber(v) or 5 end,
+})
+
+MiscTab:Button({ Title = "Enable Tp Walk", Callback = TpWalk })
+
+MiscTab:Button({
+    Title = "Infinite Jump",
+    Callback = function()
+        game:GetService("UserInputService").JumpRequest:Connect(function()
+            local hum = Character and Character:FindFirstChild("Humanoid")
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+    end,
+})
+
+MiscTab:Toggle({
+    Title = "Auto Rejoin on Kick",
+    Value = false,
+    Callback = function(v)
+        if not v then return end
+        local TS = game:GetService("TeleportService")
+        game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(c)
+            if c.Name == "ErrorPrompt" and c:FindFirstChild("MessageArea") then
+                task.spawn(function() TS:Teleport(game.PlaceId, LocalPlayer) end)
+            end
+        end)
+    end,
+})
+
+MiscTab:Toggle({
+    Title = "Anti AFK",
+    Value = false,
+    Callback = function(v)
+        if not v then return end
+        LocalPlayer.Idled:Connect(function()
+            local VU = game:GetService("VirtualUser")
+            VU:CaptureController()
+            VU:ClickButton2(Vector2.new())
+        end)
+    end,
+})
+
+local CreditTab = Window:Tab({ Title = "Credit", Icon = "info" })
+CreditTab:Section({ Title = "Links", TextXAlignment = "Left", TextSize = 16 })
+CreditTab:Button({
+    Title = "Copy Discord Link",
+    Callback = function()
+        pcall(function() setclipboard("https://discord.gg/python") end)
+        WindUI:Notify({ Title = "✅ Copied!", Content = "Discord link copied", Duration = 3 })
+    end,
+})
+
+task.spawn(function()
+    while true do
+        task.wait(1e-11)
+        if not _G.OBBY then continue end
+        if not Character or not Character:FindFirstChild("HumanoidRootPart") then
+            repeat task.wait(0.1) Character = LocalPlayer.Character
+            until Character and Character:FindFirstChild("HumanoidRootPart")
+        end
+        local target = TargetMode == "Lowest Health Player" and GetLowestHealthPlayer() or GetClosestPlayer()
+        if not target or not target.Character then continue end
+        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        if not targetRoot then continue end
+        local root = Character:FindFirstChild("HumanoidRootPart")
+        if not root then continue end
+        BodyVelocity = root:FindFirstChild("Main") or Instance.new("BodyVelocity",root)
+        BodyVelocity.Name = "Main"
+        BodyVelocity.Velocity = Vector3.zero
+        BodyVelocity.MaxForce = Vector3.new(9e9,9e9,9e9)
+        MoveTo(targetRoot.CFrame)
+    end
+end)
+
+task.wait(0.5)
+RefreshPlayerDropdown()
